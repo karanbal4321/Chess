@@ -8,7 +8,7 @@ namespace Chess
 {
     public class Pawn : Piece
     {
-        public Pawn(int aColour, bool aExists) : base(aColour, aExists)
+        public Pawn(int aColour, bool aExists, int aX, int aY) : base(aColour, aExists, aX, aY)
         {
         }
 

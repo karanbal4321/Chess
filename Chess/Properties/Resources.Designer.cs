@@ -163,6 +163,16 @@ namespace Chess.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Bitmap.
         /// </summary>
+        internal static System.Drawing.Bitmap red_background {
+            get {
+                object obj = ResourceManager.GetObject("red_background", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
         internal static System.Drawing.Bitmap rook_b {
             get {
                 object obj = ResourceManager.GetObject("rook-b", resourceCulture);
@@ -176,6 +186,36 @@ namespace Chess.Properties {
         internal static System.Drawing.Bitmap rook_w {
             get {
                 object obj = ResourceManager.GetObject("rook-w", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap white_background {
+            get {
+                object obj = ResourceManager.GetObject("white_background", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap white_background1 {
+            get {
+                object obj = ResourceManager.GetObject("white_background1", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap white_background2 {
+            get {
+                object obj = ResourceManager.GetObject("white_background2", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }

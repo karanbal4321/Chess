@@ -8,7 +8,7 @@ namespace Chess
 {
     public class Bishop : Piece
     {
-        public Bishop(int aColour, bool aExists) : base(aColour, aExists)
+        public Bishop(int aColour, bool aExists, int aX, int aY) : base(aColour, aExists, aX, aY)
         {
         }
 

@@ -1,7 +1,10 @@
-﻿using System;
+﻿using Microsoft.Win32.SafeHandles;
+using System;
 using System.Collections.Generic;
 using System.Drawing.Printing;
 using System.Linq;
+using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms.VisualStyles;
@@ -12,7 +15,7 @@ namespace Chess
     {
         private Board gameState;
         private bool whiteTurn = true;
-        
+
         public bool WhiteTurn
         {
             get
@@ -21,15 +24,21 @@ namespace Chess
             }
         }
 
+        public Board GameState
+        {
+            get
+            {
+                return gameState;
+            }
+        }
+
         public Game() 
         {
             gameState = new Board();
         }
 
-        public bool validTurnForPiece((int y, int x) piecePosition)
+        public bool validTurnForPiece(Piece piece)
         {
-            var piece = gameState.GameBoard[piecePosition.y, piecePosition.x];
-
             if (piece.Colour == 0 && whiteTurn)
             {
                 return false;
@@ -42,63 +51,193 @@ namespace Chess
 
             return true;
         }
-
-        public List<(int, int)> getPossibleMovesForPiece((int y, int x) piecePosition) 
+        
+        public void FindEntireBoardMoves()
         {
-            var piece = gameState.GameBoard[piecePosition.y, piecePosition.x];
-            
-            List<(int, int)> coordinates = new List<(int, int)>();
+            for (int i = 0; i < 8; i++)
+            {
+                for (int j = 0; j < 8; j++)
+                {
+                    var piece = gameState.GameBoard[i, j]; 
 
-            if (piece is Pawn) 
+                    if (piece.Exists)
+                    {
+                        piece.PossibleMoves = FindPieceMove(piece);
+                    }
+                }
+            }
+        }
+
+        public int FindCheckResponseMoves(int colour)
+        {
+            int oppositeColour = -1;
+            int winner = -1;
+            bool winnerExists = true;
+
+            if (colour == 0)
+            {
+                oppositeColour = 1;
+            }
+            else if (colour == 1)
+            {
+                oppositeColour = 0;
+            }
+
+            var newPieceMoves = new Dictionary<Piece, List<(int, int)>>();
+
+            // For every piece on the check side, try the available move for the piece and check whether it is still an 
+            // available move. Keep track of new available moves for piece and update it.
+
+            for (int i = 0; i < 8; i++)
+            {
+                for (int j = 0; j < 8; j++)
+                {
+                    var piece = gameState.GameBoard[i, j];
+
+                    Console.WriteLine("Considering piece " + piece.GetType());
+
+                    if (piece.Colour == colour)
+                    {
+                        var availableMoves = piece.PossibleMoves;
+                        var updatedAvailableMoves = new List<(int, int)>();
+
+                        foreach ((int y, int x) move in availableMoves)
+                        {
+                            Console.WriteLine("Moving piece at (" + i.ToString() + ", " + j.ToString() + ") to (" + move.y.ToString() + ", " + move.x.ToString() + ")");
+                            // Move piece and check whether it protects the king
+                            gameState.GameBoard[i, j] = new Piece(-1, false, j, i);
+                            piece.X = move.x;
+                            piece.Y = move.y;
+
+                            var pieceTaken = gameState.GameBoard[move.y, move.x];
+                            gameState.GameBoard[move.y, move.x] = piece;
+
+                            gameState.StringBoardOutput();
+
+                            FindEntireBoardMoves();
+
+                            var newMoveInCheck = isInCheck(oppositeColour);
+
+                            Console.WriteLine("Is still in check?");
+                            Console.WriteLine(newMoveInCheck);
+
+                            if (!newMoveInCheck)
+                            {
+                                updatedAvailableMoves.Add((move.y, move.x));
+                            }
+
+                            newPieceMoves[piece] = updatedAvailableMoves;
+
+                            // Move piece back to prepare for next move
+                            piece.X = j;
+                            piece.Y = i;
+                            gameState.GameBoard[i, j] = piece;
+
+                            if (pieceTaken.Exists)
+                            {
+                                gameState.GameBoard[move.y, move.x] = pieceTaken;
+                            }
+                            else
+                            {
+                                gameState.GameBoard[move.y, move.x] = new Piece(-1, false, move.x, move.y);
+                            }
+
+                            FindEntireBoardMoves();
+                        }
+
+                        if (updatedAvailableMoves.Count > 0)
+                        {
+                            winnerExists = false;
+                        }
+                    }
+                }
+            }
+
+            Console.WriteLine("Is Board The Same?");
+            gameState.StringBoardOutput();
+
+            for (int x = 0; x < newPieceMoves.Count; x++)
+            {
+                var piece = newPieceMoves.Keys.ElementAt(x);
+                var possibleMoves = newPieceMoves[piece];
+
+                piece.PossibleMoves = possibleMoves;
+            }
+
+            if (winnerExists)
+            {
+                winner = oppositeColour;
+            }
+
+            return winner;
+        }
+
+        public void PrintBoard(Piece[,] board)
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                for (int j = 0; j < 8; j++)
+                {
+                    Console.Write(board[i, j].ToString() + "|");
+                }
+                Console.WriteLine();
+            }
+        }
+
+        public List<(int, int)> FindPieceMove(Piece piece)
+        {
+            var coordinates = new List<(int, int)>();
+
+            if (piece is Pawn)
             {
                 if (piece.Colour == 0)
                 {
-                    coordinates = getCoordinatesForBlackPawn(piecePosition);
+                    coordinates = getCoordinatesForBlackPawn(piece);
                 }
 
                 if (piece.Colour == 1)
                 {
-                    coordinates = getCoordinatesForWhitePawn(piecePosition);
+                    coordinates = getCoordinatesForWhitePawn(piece);
                 }
             }
             else if (piece is Rook)
             {
-                coordinates = getCoordinatesForRook(piece, piecePosition);
+                coordinates = getCoordinatesForRook(piece);
             }
             else if (piece is Queen)
             {
-                coordinates = getCoordinatesForQueen(piece, piecePosition);
+                coordinates = getCoordinatesForQueen(piece);
             }
             else if (piece is Bishop)
             {
-                coordinates = getCoordinatesForBishop(piece, piecePosition);
+                coordinates = getCoordinatesForBishop(piece);
             }
             else if (piece is King)
             {
-                coordinates = getCoordinatesForKing(piece, piecePosition);
+                coordinates = getCoordinatesForKing(piece);
             }
             else if (piece is Knight)
             {
-                coordinates = getCoordinatesForKnight(piece, piecePosition);
+                coordinates = getCoordinatesForKnight(piece);
             }
 
             return coordinates;
         }
-
-        public List<(int, int)> getCoordinatesForBlackPawn((int y, int x) piecePosition)
+        
+        public List<(int, int)> getCoordinatesForBlackPawn(Piece piece)
         {
             var coordinates = new List<(int, int)>();
 
             // forward move
             bool canMoveForward = true;
 
-            if (piecePosition.y == 7)
+            if (piece.Y == 7)
             {
                 canMoveForward = false;
             }
             else
             {
-                var pieceBelow = gameState.GameBoard[piecePosition.y + 1, piecePosition.x];
+                var pieceBelow = gameState.GameBoard[piece.Y + 1, piece.X];
 
                 if (pieceBelow.Exists)
                 {
@@ -106,14 +245,14 @@ namespace Chess
                 }
                 else
                 {
-                    coordinates.Add((piecePosition.y + 1, piecePosition.x));
+                    coordinates.Add((piece.Y + 1, piece.X));
                 }
             }
 
             // special spawn case
-            if (piecePosition.y == 1)
+            if (piece.Y == 1)
             {
-                var twoPieceBelow = gameState.GameBoard[piecePosition.y + 2, piecePosition.x];
+                var twoPieceBelow = gameState.GameBoard[piece.Y + 2, piece.X];
 
                 if (twoPieceBelow.Exists)
                 {
@@ -122,48 +261,55 @@ namespace Chess
 
                 if (canMoveForward)
                 {
-                    coordinates.Add((piecePosition.y + 2, piecePosition.x));
+                    coordinates.Add((piece.Y + 2, piece.X));
                 }
             }
 
-            // take piece diagonal
-            if (piecePosition.x > 0)
+            if (piece.Y < 7)
             {
-                var pieceDownLeft = gameState.GameBoard[piecePosition.y + 1, piecePosition.x - 1];
-
-                if (pieceDownLeft.Exists && pieceDownLeft.Colour == 1)
+                // take piece diagonal
+                if (piece.X > 0)
                 {
-                    coordinates.Add((piecePosition.y + 1, piecePosition.x - 1));
+                    var pieceDownLeft = gameState.GameBoard[piece.Y + 1, piece.X - 1];
+
+                    if (pieceDownLeft.Exists && pieceDownLeft.Colour == 1)
+                    {
+                        coordinates.Add((piece.Y + 1, piece.X - 1));
+                    }
                 }
-            }
 
-            if (piecePosition.x < 7)
-            {
-                var pieceDownRight = gameState.GameBoard[piecePosition.y + 1, piecePosition.x + 1];
-
-                if (pieceDownRight.Exists && pieceDownRight.Colour == 1)
+                if (piece.X < 7)
                 {
-                    coordinates.Add((piecePosition.y + 1, piecePosition.x + 1));
+                    var pieceDownRight = gameState.GameBoard[piece.Y + 1, piece.X + 1];
+
+                    if (pieceDownRight.Exists && pieceDownRight.Colour == 1)
+                    {
+                        coordinates.Add((piece.Y + 1, piece.X + 1));
+                    }
                 }
             }
 
             return coordinates;
         }
 
-        public List<(int, int)> getCoordinatesForWhitePawn((int y, int x) piecePosition)
+        public List<(int, int)> getCoordinatesForWhitePawn(Piece piece)
         {
+            // debug
+            Console.WriteLine("Internal Game State");
+            gameState.StringBoardOutput();
+
             var coordinates = new List<(int, int)>();
 
             // forward move
             bool canMoveForward = true;
 
-            if (piecePosition.y == 0)
+            if (piece.Y == 0)
             {
                 canMoveForward = false;
             }
             else
             {
-                var pieceAbove = gameState.GameBoard[piecePosition.y - 1, piecePosition.x];
+                var pieceAbove = gameState.GameBoard[piece.Y - 1, piece.X];
 
                 if (pieceAbove.Exists)
                 {
@@ -171,14 +317,14 @@ namespace Chess
                 }
                 else
                 {
-                    coordinates.Add((piecePosition.y - 1, piecePosition.x));
+                    coordinates.Add((piece.Y - 1, piece.X));
                 }
             }
 
             // special spawn case
-            if (piecePosition.y == 6)
+            if (piece.Y == 6)
             {
-                var twoPieceAbove = gameState.GameBoard[piecePosition.y - 2, piecePosition.x];
+                var twoPieceAbove = gameState.GameBoard[piece.Y - 2, piece.X];
 
                 if (twoPieceAbove.Exists)
                 {
@@ -187,39 +333,42 @@ namespace Chess
 
                 if (canMoveForward)
                 {
-                    coordinates.Add((piecePosition.y - 2, piecePosition.x));
+                    coordinates.Add((piece.Y - 2, piece.X));
                 }
             }
 
-            // take piece diagonal
-            if (piecePosition.x > 0)
+            if (piece.Y > 0)
             {
-                var pieceUpLeft = gameState.GameBoard[piecePosition.y - 1, piecePosition.x - 1];
-
-                if (pieceUpLeft.Exists && pieceUpLeft.Colour == 0)
+                // take piece diagonal
+                if (piece.X > 0)
                 {
-                    coordinates.Add((piecePosition.y - 1, piecePosition.x - 1));
+                    var pieceUpLeft = gameState.GameBoard[piece.Y - 1, piece.X - 1];
+
+                    if (pieceUpLeft.Exists && pieceUpLeft.Colour == 0)
+                    {
+                        coordinates.Add((piece.Y - 1, piece.X - 1));
+                    }
                 }
-            }
 
-            if (piecePosition.x < 7)
-            {
-                var pieceUpRight = gameState.GameBoard[piecePosition.y - 1, piecePosition.x + 1];
-
-                if (pieceUpRight.Exists && pieceUpRight.Colour == 0)
+                if (piece.X < 7)
                 {
-                    coordinates.Add((piecePosition.y - 1, piecePosition.x + 1));
+                    var pieceUpRight = gameState.GameBoard[piece.Y - 1, piece.X + 1];
+
+                    if (pieceUpRight.Exists && pieceUpRight.Colour == 0)
+                    {
+                        coordinates.Add((piece.Y - 1, piece.X + 1));
+                    }
                 }
             }
             
             return coordinates;
         }
 
-        public List<(int, int)> getCoordinatesForQueen(Piece piece, (int y, int x) piecePosition)
+        public List<(int, int)> getCoordinatesForQueen(Piece piece)
         {
-            var rookCoords = getCoordinatesForRook(piece, piecePosition);
+            var rookCoords = getCoordinatesForRook(piece);
 
-            var bishopCoords = getCoordinatesForBishop(piece, piecePosition);
+            var bishopCoords = getCoordinatesForBishop(piece);
 
             List<(int, int)> combinedCoords = new List<(int, int)>();
 
@@ -236,62 +385,62 @@ namespace Chess
             return combinedCoords;
         }
 
-        public List<(int, int)> getCoordinatesForRook(Piece piece, (int y, int x) piecePosition)
+        public List<(int, int)> getCoordinatesForRook(Piece piece)
         {
             List<(int, int)> availableCoordinates = new List<(int, int)> ();
             int oppositeColour = piece.Colour == 0 ? 1 : 0;
 
-            for (int j = piecePosition.x + 1; j < 8; j++) 
+            for (int j = piece.X + 1; j < 8; j++) 
             {
-                var currentPiece = gameState.GameBoard[piecePosition.y, j];
+                var currentPiece = gameState.GameBoard[piece.Y, j];
 
                 if (!currentPiece.Exists) 
                 {
-                    availableCoordinates.Add((piecePosition.y, j));
+                    availableCoordinates.Add((piece.Y, j));
                 }
                 else
                 {
                     if (currentPiece.Colour == oppositeColour)
                     {
-                        availableCoordinates.Add((piecePosition.y, j));
+                        availableCoordinates.Add((piece.Y, j));
                     }
 
                     break;
                 }
             }
 
-            for (int j = piecePosition.x - 1; j >= 0; j--)
+            for (int j = piece.X - 1; j >= 0; j--)
             {
-                var currentPiece = gameState.GameBoard[piecePosition.y, j];
+                var currentPiece = gameState.GameBoard[piece.Y, j];
 
                 if (!currentPiece.Exists)
                 {
-                    availableCoordinates.Add((piecePosition.y, j));
+                    availableCoordinates.Add((piece.Y, j));
                 }
                 else
                 {
                     if (currentPiece.Colour == oppositeColour)
                     {
-                        availableCoordinates.Add((piecePosition.y, j));
+                        availableCoordinates.Add((piece.Y, j));
                     }
 
                     break;
                 }
             }
 
-            for (int i = piecePosition.y - 1; i >= 0; i--)
+            for (int i = piece.Y - 1; i >= 0; i--)
             {
-                var currentPiece = gameState.GameBoard[i, piecePosition.x];
+                var currentPiece = gameState.GameBoard[i, piece.X];
 
                 if (!currentPiece.Exists)
                 {
-                    availableCoordinates.Add((i, piecePosition.x));
+                    availableCoordinates.Add((i, piece.X));
                 }
                 else
                 {
                     if (currentPiece.Colour == oppositeColour)
                     {
-                        availableCoordinates.Add((i, piecePosition.x));
+                        availableCoordinates.Add((i, piece.X));
                     }
 
                     break;
@@ -299,19 +448,19 @@ namespace Chess
 
             }
 
-            for (int i = piecePosition.y + 1; i < 8; i++)
+            for (int i = piece.Y + 1; i < 8; i++)
             {
-                var currentPiece = gameState.GameBoard[i, piecePosition.x];
+                var currentPiece = gameState.GameBoard[i, piece.X];
 
                 if (!currentPiece.Exists)
                 {
-                    availableCoordinates.Add((i, piecePosition.x));
+                    availableCoordinates.Add((i, piece.X));
                 }
                 else
                 {
                     if (currentPiece.Colour == oppositeColour)
                     {
-                        availableCoordinates.Add((i, piecePosition.x));
+                        availableCoordinates.Add((i, piece.X));
                     }
 
                     break;
@@ -321,15 +470,14 @@ namespace Chess
             return availableCoordinates;
         }
 
-        public List<(int, int)> getCoordinatesForBishop(Piece piece, (int y, int x) piecePosition)
+        public List<(int, int)> getCoordinatesForBishop(Piece piece)
         {
             List<(int, int)> availableCoords = new List<(int, int)>();
-
             int oppositeColour = piece.Colour == 1 ? 0 : 1;
 
             // Up right
-            int j = piecePosition.x + 1;
-            for (int i = piecePosition.y - 1; i >= 0; i--)
+            int j = piece.X + 1;
+            for (int i = piece.Y - 1; i >= 0; i--)
             {
                 if (j > 7) break;
 
@@ -349,8 +497,8 @@ namespace Chess
             }
 
             // Up left
-            j = piecePosition.x - 1;
-            for (int i = piecePosition.y - 1; i >= 0; i--)
+            j = piece.X - 1;
+            for (int i = piece.Y - 1; i >= 0; i--)
             {
                 if (j < 0) break;
 
@@ -371,9 +519,9 @@ namespace Chess
             }
 
             // Down right
-            int curr_i = piecePosition.y + 1;
+            int curr_i = piece.Y + 1;
 
-            for (int curr_x = piecePosition.x + 1; curr_x < 8; curr_x++)
+            for (int curr_x = piece.X + 1; curr_x < 8; curr_x++)
             {
                 if (curr_i > 7) break;
 
@@ -394,9 +542,9 @@ namespace Chess
             }
 
             // Down left
-            curr_i = piecePosition.y + 1;
+            curr_i = piece.Y + 1;
 
-            for (int curr_x = piecePosition.x - 1; curr_x >= 0; curr_x--)
+            for (int curr_x = piece.X - 1; curr_x >= 0; curr_x--)
             {
                 if (curr_i > 7) break;
 
@@ -419,23 +567,23 @@ namespace Chess
             return availableCoords;
         }
 
-        public List<(int, int)> getCoordinatesForKing(Piece piece, (int y, int x) piecePosition)
+        public List<(int, int)> getCoordinatesForKing(Piece piece)
         {
             var availableCoords = new List<(int, int)>();
             var possibleCoords = new List<(int, int)>();
             int oppositeColour = piece.Colour == 1 ? 0 : 1;
 
-            possibleCoords.Add((piecePosition.y - 1, piecePosition.x - 1));
-            possibleCoords.Add((piecePosition.y - 1, piecePosition.x));
-            possibleCoords.Add((piecePosition.y - 1, piecePosition.x + 1));
+            possibleCoords.Add((piece.Y - 1, piece.X - 1));
+            possibleCoords.Add((piece.Y - 1, piece.X));
+            possibleCoords.Add((piece.Y - 1, piece.X + 1));
 
-            possibleCoords.Add((piecePosition.y, piecePosition.x - 1));
-            possibleCoords.Add((piecePosition.y, piecePosition.x));
-            possibleCoords.Add((piecePosition.y, piecePosition.x + 1));
+            possibleCoords.Add((piece.Y, piece.X - 1));
+            possibleCoords.Add((piece.Y, piece.X));
+            possibleCoords.Add((piece.Y, piece.X + 1));
 
-            possibleCoords.Add((piecePosition.y + 1, piecePosition.x - 1));
-            possibleCoords.Add((piecePosition.y + 1, piecePosition.x));
-            possibleCoords.Add((piecePosition.y + 1, piecePosition.x + 1));
+            possibleCoords.Add((piece.Y + 1, piece.X - 1));
+            possibleCoords.Add((piece.Y + 1, piece.X));
+            possibleCoords.Add((piece.Y + 1, piece.X + 1));
 
             foreach (var coord in possibleCoords)
             {
@@ -460,19 +608,19 @@ namespace Chess
             return availableCoords;
         }
 
-        public List<(int, int)> getCoordinatesForKnight(Piece piece, (int y, int x) piecePosition)
+        public List<(int, int)> getCoordinatesForKnight(Piece piece)
         {
             var availableCoordinates = new List<(int, int)>();
             var possibleCoordinates = new List<(int, int)>();
 
-            possibleCoordinates.Add((piecePosition.y - 1, piecePosition.x - 2));
-            possibleCoordinates.Add((piecePosition.y - 1, piecePosition.x + 2));
-            possibleCoordinates.Add((piecePosition.y + 1, piecePosition.x - 2));
-            possibleCoordinates.Add((piecePosition.y + 1, piecePosition.x + 2));
-            possibleCoordinates.Add((piecePosition.y - 2, piecePosition.x - 1));
-            possibleCoordinates.Add((piecePosition.y - 2, piecePosition.x + 1));
-            possibleCoordinates.Add((piecePosition.y + 2, piecePosition.x - 1));
-            possibleCoordinates.Add((piecePosition.y + 2, piecePosition.x + 1));
+            possibleCoordinates.Add((piece.Y - 1, piece.X - 2));
+            possibleCoordinates.Add((piece.Y - 1, piece.X + 2));
+            possibleCoordinates.Add((piece.Y + 1, piece.X - 2));
+            possibleCoordinates.Add((piece.Y + 1, piece.X + 2));
+            possibleCoordinates.Add((piece.Y - 2, piece.X - 1));
+            possibleCoordinates.Add((piece.Y - 2, piece.X + 1));
+            possibleCoordinates.Add((piece.Y + 2, piece.X - 1));
+            possibleCoordinates.Add((piece.Y + 2, piece.X + 1));
 
             int oppositeColour = piece.Colour == 1 ? 0 : 1;
 
@@ -495,21 +643,77 @@ namespace Chess
 
             return availableCoordinates;
         }
-
-        public void movePiece((int y1, int x1) oldCoordinate, (int y2, int x2) newCoordinate)
+        
+        public int movePiece(Piece clickedPiece, Piece capturedPiece)
         {
-            var oldPiece = gameState.GameBoard[oldCoordinate.y1, oldCoordinate.x1];
+            gameState.GameBoard[clickedPiece.Y, clickedPiece.X] = new Piece(aColour: -1, false, clickedPiece.X, clickedPiece.Y);
 
-            gameState.GameBoard[oldCoordinate.y1, oldCoordinate.x1] = new Piece(aColour: -1, false);
+            clickedPiece.X = capturedPiece.X;
+            clickedPiece.Y = capturedPiece.Y;
 
-            gameState.GameBoard[newCoordinate.y2, newCoordinate.x2] = oldPiece;
+            if (capturedPiece.Y == 0 && clickedPiece is Pawn)
+            {
+                var whiteQueenAsPawn = new Queen(aColour: 1, true, capturedPiece.X, capturedPiece.Y);
+                gameState.GameBoard[clickedPiece.Y, clickedPiece.X] = whiteQueenAsPawn;
+                whiteQueenAsPawn.PossibleMoves = FindPieceMove(whiteQueenAsPawn);
+            }
+            else if (capturedPiece.Y == 7 && clickedPiece is Pawn)
+            {
+                var blackQueenAsPawn = new Queen(aColour: 0, true, capturedPiece.X, capturedPiece.Y);
+                gameState.GameBoard[clickedPiece.Y, clickedPiece.X] = blackQueenAsPawn;
+                blackQueenAsPawn.PossibleMoves = FindPieceMove(blackQueenAsPawn);
+            }
+            else
+            {
+                gameState.GameBoard[clickedPiece.Y, clickedPiece.X] = clickedPiece;
+            }
+
+            FindEntireBoardMoves();
+
+            int responseColour = -1;
+
+            if (clickedPiece.Colour == 1)
+            {
+                responseColour = 0;
+            }
+            else if (clickedPiece.Colour == 0)
+            {
+                responseColour = 1;
+            }
+
+            var winner = FindCheckResponseMoves(responseColour);
 
             whiteTurn = !whiteTurn;
 
-            gameState.StringBoardOutput();
+            return winner;
+        }
 
-            Console.WriteLine();
-            Console.WriteLine();
+        public bool isInCheck(int colour)
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                for (int j = 0; j < 8; j++)
+                {
+                    var piece = gameState.GameBoard[i, j];
+
+                    if (piece.Colour == colour)
+                    {
+                        var possibleMoves = piece.PossibleMoves;
+
+                        foreach ((int y, int x) move in possibleMoves)
+                        {
+                            var possibleCapture = gameState.GameBoard[move.y, move.x];
+
+                            if (possibleCapture is King)
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return false;
         }
     }
 }
